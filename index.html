@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2efe4;
+    --panel:#f8f6ee;
+    --wood:#c9a876;
+    --wood-dark:#a8824f;
+    --mint:#6fb693;
+    --mint-deep:#3f8a68;
+    --mint-pale:#d3ecdf;
+    --ink:#2c3833;
+    --ink-soft:#6c7a73;
+    --paper-shadow-light:#ffffff;
+    --paper-shadow-dark:#d8d3c2;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg);
+    font-family:'Inter',sans-serif; color:var(--ink);
+    display:flex; align-items:center; justify-content:center; padding:32px;
+  }
+  .stage{
+    width:100%; max-width:1040px; min-height:620px;
+    display:grid; grid-template-columns:1.1fr 1fr;
+    background:var(--panel); border-radius:28px;
+    box-shadow: 24px 24px 60px var(--paper-shadow-dark), -14px -14px 40px var(--paper-shadow-light);
+    overflow:hidden;
+  }
+  @media (max-width:760px){ .stage{ grid-template-columns:1fr; } .showcase{ display:none; } }
+
+  /* ---------- Left showcase: shelf illustration ---------- */
+  .showcase{
+    background:linear-gradient(180deg,#eef0e2,#e2e6d4);
+    padding:40px 36px; display:flex; flex-direction:column; gap:26px;
+    position:relative;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    width:38px; height:38px; border-radius:11px;
+    background:linear-gradient(145deg,#8ecdac,var(--mint-deep));
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.5), 0 4px 8px rgba(63,138,104,.35);
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:18px;
+  }
+  .brand-name{ font-family:'Fraunces',serif; font-weight:600; font-size:19px; letter-spacing:.2px; }
+  .brand-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:-2px; }
+
+  .headline{ font-family:'Fraunces',serif; font-size:27px; font-weight:600; line-height:1.28; margin:6px 0 0; }
+  .subline{ color:var(--ink-soft); font-size:14px; line-height:1.6; max-width:34ch; }
+
+  .shelves{ margin-top:auto; display:flex; flex-direction:column; gap:22px; }
+  .shelf-row{ display:flex; gap:7px; align-items:flex-end; height:78px; position:relative; padding-bottom:12px; }
+  .shelf-row::after{
+    content:""; position:absolute; left:-4px; right:-4px; bottom:0; height:12px;
+    background:linear-gradient(180deg,var(--wood),var(--wood-dark));
+    border-radius:4px; box-shadow:0 6px 10px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .spine{ width:16px; border-radius:2px 2px 0 0; box-shadow: inset -2px 0 3px rgba(0,0,0,.15), inset 2px 0 2px rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.12); }
+  .spine.tall{ height:72px; } .spine.mid{ height:58px; } .spine.short{ height:46px; }
+  .s1{background:linear-gradient(180deg,#8ecdac,var(--mint-deep));}
+  .s2{background:linear-gradient(180deg,#e6ddc4,#cbbf9c);}
+  .s3{background:linear-gradient(180deg,#d3ecdf,#a9d3bf);}
+  .s4{background:linear-gradient(180deg,#c58f63,#a06d43);}
+  .s5{background:linear-gradient(180deg,#4f9c79,#356b52);}
+  .s6{background:linear-gradient(180deg,#efe6cd,#d8cba3);}
+
+  /* ---------- Right: auth panel ---------- */
+  .auth-panel{ padding:44px 42px; display:flex; flex-direction:column; }
+  .mode-switch{
+    align-self:flex-start; display:flex; background:var(--bg);
+    border-radius:14px; padding:4px; gap:2px;
+    box-shadow:inset 3px 3px 6px var(--paper-shadow-dark), inset -3px -3px 6px var(--paper-shadow-light);
+    margin-bottom:30px;
+  }
+  .mode-btn{
+    border:none; background:transparent; padding:9px 20px; border-radius:10px;
+    font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; color:var(--ink-soft);
+    cursor:pointer; transition:.25s;
+  }
+  .mode-btn.active{
+    background:linear-gradient(145deg,#82c8a4,var(--mint-deep)); color:#fff;
+    box-shadow:0 5px 12px rgba(63,138,104,.4), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+
+  .card-title{ font-family:'Fraunces',serif; font-size:23px; font-weight:600; margin:0 0 4px; }
+  .card-sub{ color:var(--ink-soft); font-size:13.5px; margin:0 0 26px; }
+
+  form{ display:flex; flex-direction:column; gap:16px; }
+  .field label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+  .field input, .field select{
+    width:100%; border:none; border-radius:12px; padding:13px 15px; font-size:14px;
+    font-family:'Inter',sans-serif; background:var(--bg); color:var(--ink);
+    box-shadow:inset 2px 2px 5px var(--paper-shadow-dark), inset -2px -2px 5px var(--paper-shadow-light);
+    outline:none;
+  }
+  .field input:focus, .field select:focus{ box-shadow:inset 2px 2px 5px var(--paper-shadow-dark), inset -2px -2px 5px var(--paper-shadow-light), 0 0 0 2.5px var(--mint); }
+  .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .submit-btn{
+    margin-top:4px; border:none; border-radius:13px; padding:14px; cursor:pointer;
+    font-family:'Inter',sans-serif; font-weight:700; font-size:14.5px; color:#fff;
+    background:linear-gradient(145deg,#82c8a4,var(--mint-deep));
+    box-shadow:0 8px 18px rgba(63,138,104,.4), inset 0 1px 0 rgba(255,255,255,.45);
+    transition:transform .12s;
+  }
+  .submit-btn:active{ transform:translateY(2px); box-shadow:0 4px 10px rgba(63,138,104,.35), inset 0 1px 0 rgba(255,255,255,.4); }
+
+  .switch-line{ text-align:center; font-size:13px; color:var(--ink-soft); margin-top:18px; }
+  .switch-line button{ background:none; border:none; color:var(--mint-deep); font-weight:700; cursor:pointer; font-size:13px; font-family:'Inter',sans-serif; }
+
+  .note{ margin-top:20px; padding:11px 14px; border-radius:11px; background:var(--mint-pale); color:var(--mint-deep); font-size:12px; text-align:center; display:none; }
+  .note.show{ display:block; }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="showcase">
+    <div class="brand">
+      <div class="brand-mark">&#128218;</div>
+      <div>
+        <div class="brand-name">BCC Library</div>
+        <div class="brand-sub">Buenavista Community College</div>
+      </div>
+    </div>
+    <div>
+      <div class="headline">Your shelf, always within reach.</div>
+      <p class="subline">Borrow, reserve, and track every title in the BCC collection from one place.</p>
+    </div>
+    <div class="shelves">
+      <div class="shelf-row">
+        <div class="spine s1 tall"></div><div class="spine s2 mid"></div><div class="spine s3 tall"></div>
+        <div class="spine s4 short"></div><div class="spine s5 mid"></div><div class="spine s6 tall"></div>
+        <div class="spine s2 short"></div><div class="spine s1 mid"></div>
+      </div>
+      <div class="shelf-row">
+        <div class="spine s5 short"></div><div class="spine s6 tall"></div><div class="spine s3 mid"></div>
+        <div class="spine s4 tall"></div><div class="spine s1 short"></div><div class="spine s2 mid"></div>
+        <div class="spine s3 short"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="auth-panel">
+    <div class="mode-switch">
+      <button class="mode-btn active" id="btn-user" onclick="setMode('user')">User</button>
+      <button class="mode-btn" id="btn-admin" onclick="setMode('admin')">Admin</button>
+    </div>
+
+    <!-- User login -->
+    <div class="view active" id="view-user-login">
+      <h1 class="card-title">Welcome back</h1>
+      <p class="card-sub">Sign in with your student account.</p>
+      <form onsubmit="return handleSubmit(event,'user-login')">
+        <div class="field"><label>Student ID</label><input name="student_id" placeholder="e.g. 202324-0001" required></div>
+        <div class="field"><label>Password</label><input type="password" name="password" placeholder="••••••••" required></div>
+        <button class="submit-btn" type="submit">Sign in</button>
+      </form>
+      <div class="switch-line">New here? <button onclick="showView('user-register')">Create an account</button></div>
+    </div>
+
+    <!-- User register -->
+    <div class="view" id="view-user-register">
+      <h1 class="card-title">Create your account</h1>
+      <p class="card-sub">Register with your BCC student details.</p>
+      <form onsubmit="return handleSubmit(event,'user-register')">
+        <div class="field"><label>Full name</label><input name="full_name" placeholder="Rene Baterbonia" required></div>
+        <div class="row-2">
+          <div class="field"><label>Student ID</label><input name="student_id" placeholder="202324-0001" required></div>
+          <div class="field"><label for="course">Course</label><select id="course" name="course" required>
+            <option value="" selected disabled>Select your course</option>
+            <option value="BSIT">BSIT</option>
+            <option value="BSHM">BSHM</option>
+            <option value="BSCRIM">BSCRIM</option>
+            <option value="BSTM">BSTM</option>
+            <option value="BSED">BSED</option>
+            <option value="BEED">BEED</option>
+          </select></div>
+        </div>
+        <div class="field"><label>Email</label><input type="email" name="email" placeholder="you@bcc.edu.ph" required></div>
+        <div class="row-2">
+          <div class="field"><label>Password</label><input type="password" name="password" required></div>
+          <div class="field"><label>Confirm password</label><input type="password" name="confirm_password" required></div>
+        </div>
+        <button class="submit-btn" type="submit">Register</button>
+      </form>
+      <div class="switch-line">Already registered? <button onclick="showView('user-login')">Sign in</button></div>
+    </div>
+
+    <!-- Admin login -->
+    <div class="view" id="view-admin-login">
+      <h1 class="card-title">Admin sign in</h1>
+      <p class="card-sub">Library staff access only.</p>
+      <form onsubmit="return handleSubmit(event,'admin-login')">
+        <div class="field"><label>Admin ID</label><input name="admin_id" placeholder="e.g. LIB-003" required></div>
+        <div class="field"><label>Password</label><input type="password" name="password" placeholder="••••••••" required></div>
+        <button class="submit-btn" type="submit">Sign in</button>
+      </form>
+    </div>
+
+    <div class="note" id="note">Hooked up to the UI only for now — connect a database to enable real sign-in.</div>
+  </div>
+</div>
+
+<script>
+  function setMode(mode){
+    document.getElementById('btn-user').classList.toggle('active', mode==='user');
+    document.getElementById('btn-admin').classList.toggle('active', mode==='admin');
+    if(mode==='admin'){ showView('admin-login'); } else { showView('user-login'); }
+  }
+  function showView(name){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+name).classList.add('active');
+    document.getElementById('note').classList.remove('show');
+  }
+  function handleSubmit(e, formName){
+    e.preventDefault();
+    document.getElementById('note').classList.add('show');
+    return false;
+  }
+</script>
+</body>
+</html>
