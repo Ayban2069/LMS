@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library — Borrowing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/admin.css">
+</head>
+<body class="pending">
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Borrow, return &amp; fines</h1>
+        <p id="rulesLine"></p>
+      </div>
+    </div>
+
+    <!-- Desk checkout -->
+    <div class="card">
+      <h2>Check out a book</h2>
+      <div class="checkout-grid">
+        <div>
+          <div class="field picker">
+            <label>Student (ID or name)</label>
+            <input type="text" id="studentInput" placeholder="e.g. 22-1045 or Juan" autocomplete="off">
+            <div class="picker-results" id="studentResults"></div>
+          </div>
+          <div class="selected-box" id="studentBox"><span class="cell-sub">No student selected</span></div>
+        </div>
+        <div>
+          <div class="field picker">
+            <label>Book (title, author or ISBN)</label>
+            <input type="text" id="bookInput" placeholder="Start typing a title…" autocomplete="off">
+            <div class="picker-results" id="bookResults"></div>
+          </div>
+          <div class="selected-box" id="bookBox"><span class="cell-sub">No book selected</span></div>
+        </div>
+        <div style="padding-top:24px">
+          <button class="btn" id="checkoutBtn" disabled>Check out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loans / history / fines -->
+    <div class="card">
+      <div class="card-head">
+        <div class="tabs" id="tabs">
+          <button class="tab active" data-tab="active">Active loans</button>
+          <button class="tab" data-tab="history">Returned</button>
+          <button class="tab" data-tab="fines">Fines</button>
+        </div>
+        <input type="search" class="search-box" id="filterInput" placeholder="Filter by student or book…">
+      </div>
+      <div id="tabNote" class="cell-sub" style="margin-bottom:10px"></div>
+      <div class="table-wrap" id="tabTable"></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/supabaseClient.js"></script>
+<script src="../assets/admin.js"></script>
+<script>
+let admin, tab = 'active';
+let selStudent = null, selBook = null;
+let loans = [], returned = [], fines = [];
+
+$('rulesLine').textContent =
+  `${ADMIN_CONFIG.LOAN_DAYS}-day loans · ${peso(ADMIN_CONFIG.FINE_PER_DAY)} per overdue day · up to ${ADMIN_CONFIG.MAX_BOOKS} books per student`;
+
+function statusBadge(status){
+  if (status === 'overdue') return '<span class="badge bad">Overdue</span>';
+  if (status === 'returned') return '<span class="badge ok">Returned</span>';
+  return '<span class="badge warn">Borrowed</span>';
+}
+
+// ---------- Checkout form ----------
+function refreshCheckoutState(){
+  $('studentBox').innerHTML = selStudent
+    ? `<div class="cell-main">${esc(selStudent.full_name)}</div>
+       <div class="cell-sub">${esc(selStudent.student_id)} · ${esc(selStudent.course)}
+       ${selStudent.status === 'active' ? '<span class="badge ok">Active</span>' : '<span class="badge bad">Suspended</span>'}</div>`
+    : '<span class="cell-sub">No student selected</span>';
+
+  $('bookBox').innerHTML = selBook
+    ? `<div class="cell-main">${esc(selBook.title)}</div>
+       <div class="cell-sub">${esc(selBook.author)} ·
+       <span class="badge ${selBook.available_copies > 0 ? 'ok' : 'bad'}">${selBook.available_copies} available</span></div>`
+    : '<span class="cell-sub">No book selected</span>';
+
+  $('checkoutBtn').disabled = !(selStudent && selStudent.status === 'active' && selBook && selBook.available_copies > 0);
+}
+
+const studentPicker = makePicker({
+  inputId: 'studentInput', resultsId: 'studentResults',
+  search: async (q) => {
+    const { data } = await db.from('students')
+      .select('id, student_id, full_name, course, status')
+      .or(`student_id.ilike.%${q}%,full_name.ilike.%${q}%`).limit(6);
+    return data || [];
+  },
+  render: (s) => `<div class="cell-main">${esc(s.full_name)}</div><div class="cell-sub">${esc(s.student_id)} · ${esc(s.course)}</div>`,
+  label: (s) => s.full_name + ' (' + s.student_id + ')',
+  onPick: (s) => { selStudent = s; refreshCheckoutState(); },
+});
+
+const bookPicker = makePicker({
+  inputId: 'bookInput', resultsId: 'bookResults',
+  search: async (q) => {
+    const { data } = await db.from('books')
+      .select('book_id, title, author, isbn, available_copies')
+      .or(`title.ilike.%${q}%,author.ilike.%${q}%,isbn.ilike.%${q}%`).limit(6);
+    return data || [];
+  },
+  render: (b) => `<div class="cell-main">${esc(b.title)}</div><div class="cell-sub">${esc(b.author)} · ${b.available_copies} available</div>`,
+  label: (b) => b.title,
+  onPick: (b) => { selBook = b; refreshCheckoutState(); },
+});
+
+$('checkoutBtn').addEventListener('click', async () => {
+  if (!selStudent || !selBook) return;
+  const btn = $('checkoutBtn');
+  btn.disabled = true;
+  const { error } = await db.rpc('checkout_book', { p_student: selStudent.id, p_book: selBook.book_id });
+  if (error){ toast(error.message, true); refreshCheckoutState(); return; }
+
+  toast(`Checked out “${selBook.title}”. Due ${fmtDate(addDays(ADMIN_CONFIG.LOAN_DAYS))}.`);
+  studentPicker.clear(); bookPicker.clear();
+  loadAll();
+});
+
+// ---------- Data ----------
+async function loadAll(){
+  await db.rpc('refresh_overdue');
+  const [a, h, f] = await Promise.all([
+    db.from('borrow_records')
+      .select('borrow_id, borrow_date, due_date, status, students(full_name, student_id), books(title)')
+      .in('status', ['borrowed', 'overdue']).order('due_date'),
+    db.from('borrow_records')
+      .select('borrow_id, borrow_date, due_date, return_date, status, students(full_name, student_id), books(title)')
+      .eq('status', 'returned').order('return_date', { ascending:false }).limit(50),
+    db.from('fines')
+      .select('fine_id, amount, reason, paid, paid_at, borrow_records(students(full_name, student_id), books(title))')
+      .order('paid').order('fine_id', { ascending:false }),
+  ]);
+  const failed = [a, h, f].find(r => r.error);
+  if (failed) toast(failed.error.message, true);
+  loans = a.data || []; returned = h.data || []; fines = f.data || [];
+  renderTab();
+}
+
+// ---------- Tabs ----------
+function matches(q, ...parts){ return !q || parts.some(p => (p || '').toLowerCase().includes(q)); }
+
+function renderTab(){
+  const q = $('filterInput').value.trim().toLowerCase();
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  let html = '', note = '';
+
+  if (tab === 'active'){
+    const rows = loans.filter(r => matches(q, r.students?.full_name, r.students?.student_id, r.books?.title));
+    const late = loans.filter(r => r.status === 'overdue').length;
+    note = `${loans.length} book(s) out` + (late ? ` · ${late} overdue` : '');
+    html = table(['Student', 'Book', 'Borrowed', 'Due', 'Status', 'Fine so far', ''], rows.map(r => {
+      const days = daysOverdue(r.due_date);
+      const fine = days * ADMIN_CONFIG.FINE_PER_DAY;
+      return `<tr>
+        <td><div class="cell-main">${esc(r.students?.full_name)}</div><div class="cell-sub">${esc(r.students?.student_id)}</div></td>
+        <td>${esc(r.books?.title)}</td>
+        <td>${fmtDate(r.borrow_date)}</td>
+        <td>${fmtDate(r.due_date)}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td>${days > 0 ? `<span class="badge bad">${peso(fine)}</span> <span class="cell-sub">${days} day(s)</span>` : '<span class="cell-sub">—</span>'}</td>
+        <td class="actions"><button class="btn small" data-act="return" data-id="${r.borrow_id}">Mark returned</button></td>
+      </tr>`;
+    }), 'No active loans.');
+  }
+
+  if (tab === 'history'){
+    const rows = returned.filter(r => matches(q, r.students?.full_name, r.students?.student_id, r.books?.title));
+    note = 'Most recent 50 returns';
+    html = table(['Student', 'Book', 'Borrowed', 'Due', 'Returned'], rows.map(r => `<tr>
+      <td><div class="cell-main">${esc(r.students?.full_name)}</div><div class="cell-sub">${esc(r.students?.student_id)}</div></td>
+      <td>${esc(r.books?.title)}</td>
+      <td>${fmtDate(r.borrow_date)}</td>
+      <td>${fmtDate(r.due_date)}</td>
+      <td>${fmtDate(r.return_date)}${r.return_date > r.due_date ? ' <span class="badge warn">Late</span>' : ''}</td>
+    </tr>`), 'No returned books yet.');
+  }
+
+  if (tab === 'fines'){
+    const rows = fines.filter(f => matches(q,
+      f.borrow_records?.students?.full_name, f.borrow_records?.students?.student_id, f.borrow_records?.books?.title));
+    const unpaid = fines.filter(f => !f.paid).reduce((s, f) => s + Number(f.amount), 0);
+    note = `Unpaid total: ${peso(unpaid)}`;
+    html = table(['Student', 'Book', 'Reason', 'Amount', 'Status', ''], rows.map(f => `<tr>
+      <td><div class="cell-main">${esc(f.borrow_records?.students?.full_name)}</div><div class="cell-sub">${esc(f.borrow_records?.students?.student_id)}</div></td>
+      <td>${esc(f.borrow_records?.books?.title)}</td>
+      <td>${esc(f.reason)}</td>
+      <td class="cell-main">${peso(f.amount)}</td>
+      <td>${f.paid ? `<span class="badge ok">Paid ${fmtDate(f.paid_at)}</span>` : '<span class="badge bad">Unpaid</span>'}</td>
+      <td class="actions">${f.paid ? '' : `<button class="btn small" data-act="pay" data-id="${f.fine_id}">Mark paid</button>`}</td>
+    </tr>`), 'No fines recorded.');
+  }
+
+  $('tabNote').textContent = note;
+  $('tabTable').innerHTML = html;
+}
+
+function table(headers, rows, emptyText){
+  if (!rows.length) return `<div class="empty">${emptyText}</div>`;
+  return `<table class="data"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+
+$('tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('.tab');
+  if (!t) return;
+  tab = t.dataset.tab;
+  renderTab();
+});
+$('filterInput').addEventListener('input', renderTab);
+
+$('tabTable').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  btn.disabled = true;
+
+  if (btn.dataset.act === 'return'){
+    const { data, error } = await db.rpc('return_book', { p_borrow: Number(btn.dataset.id) });
+    if (error){ btn.disabled = false; return toast(error.message, true); }
+    toast(Number(data) > 0 ? `Returned. Fine recorded: ${peso(data)}` : 'Returned. No fine.');
+  }
+
+  if (btn.dataset.act === 'pay'){
+    const { error } = await db.from('fines')
+      .update({ paid: true, paid_at: new Date().toISOString() })
+      .eq('fine_id', Number(btn.dataset.id));
+    if (error){ btn.disabled = false; return toast(error.message, true); }
+    toast('Fine marked as paid.');
+  }
+  loadAll();
+});
+
+(async () => {
+  admin = await initAdmin('borrowing');
+  if (admin){ refreshCheckoutState(); loadAll(); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library — Books</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/admin.css">
+</head>
+<body class="pending">
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Books &amp; categories</h1>
+        <p>Everything added here appears on the student shelf.</p>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Categories</h2>
+        <form class="row" id="catForm">
+          <input type="text" id="catName" placeholder="New category name" maxlength="60" style="width:220px" required>
+          <button class="btn small" type="submit">Add category</button>
+        </form>
+      </div>
+      <div class="chips" id="catList"><span class="cell-sub">Loading…</span></div>
+    </div>
+
+    <!-- Books -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Books <span class="cell-sub" id="bookCount"></span></h2>
+        <div class="row">
+          <input type="search" class="search-box" id="bookSearch" placeholder="Search books…">
+          <button class="btn" id="addBookBtn">+ Add book</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Book</th><th>Category</th><th>Shelf</th><th>Copies</th><th></th></tr></thead>
+          <tbody id="bookRows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Add / edit book -->
+<div class="modal-backdrop" id="bookModal">
+  <form class="modal" id="bookForm">
+    <h2 id="bookModalTitle">Add book</h2>
+    <div class="form-grid">
+      <div class="field full"><label>Title *</label><input type="text" id="f_title" maxlength="200" required></div>
+      <div class="field"><label>Author *</label><input type="text" id="f_author" maxlength="150" required></div>
+      <div class="field"><label>Category</label><select id="f_category"></select></div>
+      <div class="field"><label>ISBN</label><input type="text" id="f_isbn" maxlength="20"></div>
+      <div class="field"><label>Publisher</label><input type="text" id="f_publisher" maxlength="150"></div>
+      <div class="field"><label>Year published</label><input type="number" id="f_year" min="1000" max="2100"></div>
+      <div class="field"><label>Shelf location</label><input type="text" id="f_shelf" maxlength="50" placeholder="e.g. Shelf 3B"></div>
+      <div class="field"><label>Total copies *</label><input type="number" id="f_copies" min="1" value="1" required></div>
+      <div class="field full">
+        <label>Cover image URL</label>
+        <input type="url" id="f_cover" placeholder="https://upload.wikimedia.org/…">
+        <div class="hint-text">Use the direct image link (starts with upload.wikimedia.org), not the Wikipedia page link.</div>
+        <img class="cover-preview" id="coverPreview" alt="Cover preview" referrerpolicy="no-referrer">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancelBook">Cancel</button>
+      <button type="submit" class="btn" id="saveBook">Save book</button>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/supabaseClient.js"></script>
+<script src="../assets/admin.js"></script>
+<script>
+let admin, categories = [], books = [], editing = null;
+
+const blankToNull = (v) => { const t = v.trim(); return t === '' ? null : t; };
+
+async function loadAll(){
+  const [c, b] = await Promise.all([
+    db.from('categories').select('category_id, name').order('name'),
+    db.from('books').select('*, categories(name)').order('title'),
+  ]);
+  if (c.error || b.error){ toast((c.error || b.error).message, true); return; }
+  categories = c.data; books = b.data;
+  renderCategories();
+  renderBooks();
+}
+
+// ---------- Categories ----------
+function renderCategories(){
+  $('catList').innerHTML = categories.length ? categories.map(c => `
+    <span class="chip">${esc(c.name)}
+      <button data-act="rename" data-id="${c.category_id}" title="Rename">✎</button>
+      <button data-act="delete" data-id="${c.category_id}" title="Delete">✕</button>
+    </span>`).join('') : '<span class="cell-sub">No categories yet — add one above.</span>';
+
+  $('f_category').innerHTML = '<option value="">— None —</option>' +
+    categories.map(c => `<option value="${c.category_id}">${esc(c.name)}</option>`).join('');
+}
+
+$('catForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('catName').value.trim();
+  if (!name) return;
+  const { error } = await db.from('categories').insert({ name });
+  if (error) return toast(error.code === '23505' ? 'That category already exists.' : error.message, true);
+  $('catName').value = '';
+  toast('Category added.');
+  loadAll();
+});
+
+$('catList').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const cat = categories.find(c => String(c.category_id) === btn.dataset.id);
+  if (!cat) return;
+
+  if (btn.dataset.act === 'rename'){
+    const name = prompt('Rename category:', cat.name);
+    if (name === null || !name.trim() || name.trim() === cat.name) return;
+    const { error } = await db.from('categories').update({ name: name.trim() }).eq('category_id', cat.category_id);
+    if (error) return toast(error.code === '23505' ? 'That category already exists.' : error.message, true);
+    toast('Category renamed.');
+  } else {
+    if (!confirm(`Delete the category "${cat.name}"?`)) return;
+    const { error } = await db.from('categories').delete().eq('category_id', cat.category_id);
+    if (error) return toast(error.code === '23503' ? 'Books still use this category. Move or delete them first.' : error.message, true);
+    toast('Category deleted.');
+  }
+  loadAll();
+});
+
+// ---------- Books table ----------
+function renderBooks(){
+  const q = $('bookSearch').value.trim().toLowerCase();
+  const list = books.filter(b => !q ||
+    [b.title, b.author, b.isbn, b.categories?.name].some(v => (v || '').toLowerCase().includes(q)));
+
+  $('bookCount').textContent = '(' + list.length + (list.length !== books.length ? ' of ' + books.length : '') + ')';
+
+  $('bookRows').innerHTML = list.length ? list.map(b => `
+    <tr>
+      <td>
+        <div class="book-cell">
+          ${b.cover_image_url
+            ? `<img class="thumb" src="${esc(b.cover_image_url)}" alt="" referrerpolicy="no-referrer" onerror="this.className='thumb blank';this.removeAttribute('src')">`
+            : '<div class="thumb blank"></div>'}
+          <div><div class="cell-main">${esc(b.title)}</div><div class="cell-sub">${esc(b.author)}${b.isbn ? ' · ' + esc(b.isbn) : ''}</div></div>
+        </div>
+      </td>
+      <td>${b.categories?.name ? esc(b.categories.name) : '<span class="cell-sub">—</span>'}</td>
+      <td>${esc(b.shelf_location) || '<span class="cell-sub">—</span>'}</td>
+      <td><span class="badge ${b.available_copies > 0 ? 'ok' : 'bad'}">${b.available_copies} / ${b.total_copies}</span></td>
+      <td class="actions">
+        <button class="btn ghost small" data-act="edit" data-id="${b.book_id}">Edit</button>
+        <button class="btn danger small" data-act="delete" data-id="${b.book_id}">Delete</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="5" class="empty">${books.length ? 'No books match your search.' : 'No books yet — click “Add book” to start.'}</td></tr>`;
+}
+
+$('bookSearch').addEventListener('input', renderBooks);
+
+$('bookRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const book = books.find(b => String(b.book_id) === btn.dataset.id);
+  if (!book) return;
+
+  if (btn.dataset.act === 'edit') return openBookForm(book);
+
+  if (!confirm(`Delete "${book.title}"? This cannot be undone.`)) return;
+  const { error } = await db.from('books').delete().eq('book_id', book.book_id);
+  if (error) return toast(error.code === '23503'
+    ? 'This book has borrow or reservation history, so it can’t be deleted.' : error.message, true);
+  toast('Book deleted.');
+  loadAll();
+});
+
+// ---------- Add / edit form ----------
+function updateCoverPreview(){
+  const url = $('f_cover').value.trim();
+  const img = $('coverPreview');
+  if (url){ img.src = url; img.style.display = 'block'; } else { img.style.display = 'none'; }
+}
+$('f_cover').addEventListener('input', updateCoverPreview);
+$('coverPreview').addEventListener('error', () => { $('coverPreview').style.display = 'none'; });
+
+function openBookForm(book){
+  editing = book || null;
+  $('bookModalTitle').textContent = book ? 'Edit book' : 'Add book';
+  $('f_title').value     = book?.title ?? '';
+  $('f_author').value    = book?.author ?? '';
+  $('f_category').value  = book?.category_id ?? '';
+  $('f_isbn').value      = book?.isbn ?? '';
+  $('f_publisher').value = book?.publisher ?? '';
+  $('f_year').value      = book?.published_year ?? '';
+  $('f_shelf').value     = book?.shelf_location ?? '';
+  $('f_copies').value    = book?.total_copies ?? 1;
+  $('f_cover').value     = book?.cover_image_url ?? '';
+  updateCoverPreview();
+  openModal('bookModal');
+}
+
+$('addBookBtn').addEventListener('click', () => openBookForm(null));
+$('cancelBook').addEventListener('click', () => closeModal('bookModal'));
+$('bookModal').addEventListener('click', (e) => { if (e.target === $('bookModal')) closeModal('bookModal'); });
+
+$('bookForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const total = parseInt($('f_copies').value, 10);
+  if (!(total >= 1)) return toast('Total copies must be at least 1.', true);
+
+  const payload = {
+    title: $('f_title').value.trim(),
+    author: $('f_author').value.trim(),
+    category_id: $('f_category').value ? Number($('f_category').value) : null,
+    isbn: blankToNull($('f_isbn').value),
+    publisher: blankToNull($('f_publisher').value),
+    published_year: $('f_year').value ? parseInt($('f_year').value, 10) : null,
+    shelf_location: blankToNull($('f_shelf').value),
+    cover_image_url: blankToNull($('f_cover').value),
+    total_copies: total,
+  };
+
+  const saveBtn = $('saveBook');
+  saveBtn.disabled = true;
+  let error;
+
+  if (editing){
+    // keep "available" in step with the change in total copies
+    const delta = total - editing.total_copies;
+    payload.available_copies = Math.min(total, Math.max(0, editing.available_copies + delta));
+    ({ error } = await db.from('books').update(payload).eq('book_id', editing.book_id));
+  } else {
+    payload.available_copies = total;
+    payload.added_by = admin.id;
+    ({ error } = await db.from('books').insert(payload));
+  }
+
+  saveBtn.disabled = false;
+  if (error) return toast(error.code === '23505' ? 'A book with that ISBN already exists.' : error.message, true);
+
+  closeModal('bookModal');
+  toast(editing ? 'Book updated.' : 'Book added.');
+  loadAll();
+});
+
+(async () => {
+  admin = await initAdmin('books');
+  if (admin) loadAll();
+})();
+</script>
+</body>
+</html>

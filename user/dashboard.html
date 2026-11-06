@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library — My Shelf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2efe4; --panel:#f8f6ee;
+    --wood:#c9a876; --wood-dark:#a8824f; --wood-deep:#8a6438;
+    --mint:#6fb693; --mint-deep:#3f8a68; --mint-pale:#d3ecdf;
+    --ink:#2c3833; --ink-soft:#6c7a73;
+    --shadow-l:#ffffff; --shadow-d:#d8d3c2;
+    --danger:#a3492a; --danger-pale:#f3ddd3;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); font-family:'Inter',sans-serif; color:var(--ink); }
+  body.pending{ visibility:hidden; }
+  button{ font-family:inherit; }
+
+  /* ---------- Top bar / search ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    padding:22px 40px 16px; border-bottom:1px solid var(--shadow-d);
+  }
+  .topbar-inner{ max-width:1100px; margin:0 auto; display:flex; align-items:center; gap:18px; }
+  .brand{ font-family:'Fraunces',serif; font-weight:700; font-size:20px; white-space:nowrap; }
+  .search-wrap{ position:relative; flex:1; }
+  .search-input{
+    width:100%; border:none; border-radius:14px; padding:13px 18px; font-size:14px;
+    font-family:'Inter',sans-serif; background:var(--bg); color:var(--ink);
+    box-shadow:inset 3px 3px 6px var(--shadow-d), inset -3px -3px 6px var(--shadow-l);
+    outline:none;
+  }
+  .search-input:focus{ box-shadow:inset 3px 3px 6px var(--shadow-d), inset -3px -3px 6px var(--shadow-l), 0 0 0 2.5px var(--mint); }
+  .search-results{
+    position:absolute; top:calc(100% + 8px); left:0; right:0; background:var(--panel);
+    border-radius:14px; box-shadow:0 14px 30px rgba(0,0,0,.18); max-height:340px; overflow-y:auto;
+    display:none; z-index:30;
+  }
+  .search-results.show{ display:block; }
+  .result-item{ display:flex; align-items:center; gap:12px; padding:10px 16px; cursor:pointer; }
+  .result-item:hover{ background:var(--mint-pale); }
+  .result-thumb{
+    width:34px; height:48px; border-radius:4px; background:var(--bg); flex:none; object-fit:cover; overflow:hidden;
+    box-shadow:inset 2px 2px 4px var(--shadow-d), inset -2px -2px 4px var(--shadow-l);
+    display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--ink-soft);
+  }
+  img.result-thumb{ box-shadow:0 2px 5px rgba(0,0,0,.2); }
+  .result-title{ font-size:13.5px; font-weight:500; }
+  .result-sub{ font-size:12px; color:var(--ink-soft); }
+  .no-results{ padding:14px 16px; font-size:13px; color:var(--ink-soft); }
+  /* ---------- Profile button + panel ---------- */
+  .profile-wrap{ position:relative; flex:none; }
+  .avatar{
+    width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; position:relative;
+    font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:#fff;
+    background:linear-gradient(145deg,#8ecdac,var(--mint-deep));
+    box-shadow:0 6px 12px rgba(63,138,104,.4), inset 0 2px 3px rgba(255,255,255,.5);
+  }
+  .avatar:active{ transform:translateY(1px); }
+  .avatar .dot{
+    position:absolute; top:-1px; right:-1px; width:13px; height:13px; border-radius:50%; display:none;
+    background:var(--danger); border:2px solid var(--bg);
+  }
+  .avatar .dot.show{ display:block; }
+  .profile-panel{
+    position:absolute; top:calc(100% + 12px); left:0; z-index:40; display:none;
+    width:min(370px, calc(100vw - 36px)); max-height:min(76vh, 560px);
+    background:var(--panel); border-radius:20px; padding:20px; overflow:hidden; flex-direction:column;
+    box-shadow:0 18px 44px rgba(0,0,0,.28), 6px 6px 16px var(--shadow-d);
+  }
+  .profile-panel.show{ display:flex; }
+  #pBody{ flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:4px; margin-right:-4px; }
+  .p-head{ display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .p-head .avatar{ width:50px; height:50px; cursor:default; font-size:18px; flex:none; display:flex; align-items:center; justify-content:center; }
+  .p-name{ font-family:'Fraunces',serif; font-weight:700; font-size:17px; }
+  .p-sub{ font-size:12.5px; color:var(--ink-soft); }
+  .p-section{ margin-top:16px; }
+  .p-section h3{ font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.6px; margin:0 0 8px; }
+  .loan{
+    padding:11px 13px; border-radius:12px; background:var(--bg); margin-bottom:8px;
+    box-shadow:inset 2px 2px 5px var(--shadow-d), inset -2px -2px 5px var(--shadow-l);
+  }
+  .loan-title{ font-weight:600; font-size:13.5px; }
+  .loan-meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; font-size:12px; color:var(--ink-soft); }
+  .badge.warn{ background:#f4e6c3; color:#8a6414; }
+  .badge.muted{ background:var(--panel); color:var(--ink-soft); }
+  .p-empty{ font-size:13px; color:var(--ink-soft); padding:6px 2px; }
+  .fine-box{
+    padding:12px 14px; border-radius:12px; background:var(--danger-pale); color:var(--danger); font-size:13px; font-weight:600;
+  }
+  .fine-box small{ display:block; font-weight:500; margin-top:2px; }
+  .signout{
+    width:100%; margin-top:14px; flex:none; border:none; border-radius:12px; padding:11px 16px; font-weight:700; font-size:13.5px; cursor:pointer; color:var(--ink);
+    background:var(--bg); box-shadow:4px 4px 9px var(--shadow-d), -3px -3px 8px var(--shadow-l);
+  }
+  .signout:active{ transform:translateY(1px); }
+
+  /* ---------- Notice banner ---------- */
+  .notice{
+    max-width:1100px; margin:18px auto 0; padding:12px 18px; border-radius:12px; font-size:13.5px;
+    background:var(--danger-pale); color:var(--danger); display:none; margin-left:40px; margin-right:40px;
+  }
+  .notice.show{ display:block; }
+  @media (min-width:1180px){ .notice{ margin-left:auto; margin-right:auto; } }
+
+  /* ---------- Shelf wall ---------- */
+  .shelf-wall{ max-width:1100px; margin:0 auto; padding:30px 40px 60px; display:flex; flex-direction:column; gap:46px; }
+  .wall-msg{ text-align:center; color:var(--ink-soft); padding:60px 0; }
+
+  .shelf-block{ position:relative; }
+  .shelf-label{
+    display:inline-block; margin-bottom:14px; padding:6px 16px; border-radius:6px;
+    background:linear-gradient(180deg,var(--wood),var(--wood-dark));
+    font-family:'Fraunces',serif; font-weight:700; font-size:13px; letter-spacing:1.6px; text-transform:uppercase;
+    color:var(--wood); text-shadow:-1px -1px 1px rgba(0,0,0,.45), 1px 1px 1px rgba(255,255,255,.35);
+    box-shadow:0 3px 6px rgba(0,0,0,.15);
+  }
+
+  .shelf-scroll{
+    display:flex; gap:18px; overflow-x:auto; overflow-y:hidden; padding:10px 6px 40px;
+    position:relative;
+  }
+  .shelf-scroll::-webkit-scrollbar{ height:8px; }
+  .shelf-scroll::-webkit-scrollbar-thumb{ background:var(--shadow-d); border-radius:4px; }
+  .shelf-scroll::after{
+    content:""; position:absolute; left:0; right:0; bottom:8px; height:14px;
+    background:linear-gradient(180deg,var(--wood),var(--wood-deep));
+    border-radius:4px; box-shadow:0 8px 12px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.3);
+    z-index:0;
+  }
+
+  .book{ flex:none; width:118px; position:relative; z-index:1; text-align:center; cursor:pointer;
+    transition:transform .2s ease; outline:none; }
+  .book:hover, .book:focus-visible{ transform:translateY(-10px) scale(1.05); z-index:5; }
+  .cover{
+    width:118px; height:172px; border-radius:6px 6px 3px 3px; overflow:hidden; position:relative;
+    background:repeating-linear-gradient(135deg,#e7e2d1,#e7e2d1 8px,#ded8c4 8px,#ded8c4 16px);
+    border:1px dashed var(--shadow-d);
+    box-shadow:0 6px 10px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.4);
+    display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--ink-soft);
+    transition:box-shadow .2s ease;
+  }
+  .cover.has-img{ border:none; background:var(--bg); }
+  .cover img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .book:hover .cover, .book:focus-visible .cover{ box-shadow:0 16px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.5); }
+  .tag-out{
+    position:absolute; top:8px; right:-4px; padding:3px 9px; font-size:10.5px; font-weight:700; color:#fff;
+    background:linear-gradient(145deg,#d1805f,var(--danger)); border-radius:6px 0 0 6px;
+    box-shadow:0 2px 5px rgba(0,0,0,.25);
+  }
+  .book-title{
+    margin-top:8px; font-size:12.5px; font-weight:500; color:var(--ink);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+
+  /* ---------- Book details ---------- */
+  .modal-backdrop{ position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(44,56,51,.45); }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    width:100%; max-width:560px; max-height:92vh; overflow-y:auto; background:var(--panel); border-radius:24px; padding:26px;
+    box-shadow:0 24px 60px rgba(0,0,0,.35); display:flex; gap:22px;
+  }
+  .modal .cover{ flex:none; cursor:default; }
+  .modal h2{ font-family:'Fraunces',serif; font-size:21px; margin:0 0 4px; }
+  .modal .by{ color:var(--ink-soft); margin-bottom:14px; }
+  .facts{ display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:13px; margin:0 0 16px; }
+  .facts dt{ color:var(--ink-soft); font-weight:600; }
+  .facts dd{ margin:0; }
+  .badge{ display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; }
+  .badge.ok{ background:var(--mint-pale); color:var(--mint-deep); }
+  .badge.bad{ background:var(--danger-pale); color:var(--danger); }
+  .modal-note{ font-size:13px; color:var(--ink-soft); margin:0 0 14px; }
+  .modal-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+  .btn{
+    border:none; border-radius:12px; padding:11px 18px; font-weight:700; font-size:13.5px; cursor:pointer; color:#fff;
+    background:linear-gradient(145deg,#82c8a4,var(--mint-deep));
+    box-shadow:0 6px 14px rgba(63,138,104,.4), inset 0 1px 0 rgba(255,255,255,.45);
+  }
+  .btn:active{ transform:translateY(2px); }
+  .btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+  .btn.ghost{ color:var(--ink); background:var(--bg); box-shadow:4px 4px 9px var(--shadow-d), -3px -3px 8px var(--shadow-l); }
+  @media (max-width:520px){ .modal{ flex-direction:column; align-items:center; } .topbar{ padding:16px 18px 12px; } .shelf-wall{ padding:24px 18px 50px; } }
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); z-index:80; opacity:0; pointer-events:none;
+    padding:12px 20px; border-radius:14px; font-weight:600; font-size:13.5px; background:var(--mint-deep); color:#fff;
+    box-shadow:0 10px 24px rgba(0,0,0,.25); transition:.25s; max-width:90vw;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.error{ background:var(--danger); }
+</style>
+</head>
+<body class="pending">
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="profile-wrap" id="profileWrap">
+      <button class="avatar" id="avatarBtn" aria-label="My profile" aria-haspopup="true" aria-expanded="false">
+        <span id="avatarInitials">?</span><span class="dot" id="avatarDot"></span>
+      </button>
+      <div class="profile-panel" id="profilePanel" role="dialog" aria-label="My profile">
+        <div class="p-head">
+          <div class="avatar" aria-hidden="true"><span id="panelInitials">?</span></div>
+          <div><div class="p-name" id="pName"></div><div class="p-sub" id="pSub"></div></div>
+        </div>
+        <div id="pBody"><div class="p-empty">Loading your books…</div></div>
+        <button class="signout" id="signOutBtn">Sign out</button>
+      </div>
+    </div>
+    <div class="brand">BCC Library</div>
+    <div class="search-wrap">
+      <input class="search-input" id="searchInput" type="text" placeholder="Search by title or author..." autocomplete="off">
+      <div class="search-results" id="searchResults"></div>
+    </div>
+  </div>
+</div>
+
+<div class="notice" id="notice"></div>
+
+<div class="shelf-wall" id="wall">
+  <div class="wall-msg">Loading the shelves…</div>
+</div>
+
+<div class="modal-backdrop" id="bookModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="cover" id="mCover"></div>
+    <div>
+      <h2 id="mTitle"></h2>
+      <div class="by" id="mBy"></div>
+      <dl class="facts" id="mFacts"></dl>
+      <p class="modal-note" id="mNote"></p>
+      <div class="modal-actions">
+        <button class="btn" id="mReserve" style="display:none">Reserve this book</button>
+        <button class="btn ghost" id="mClose">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/supabaseClient.js"></script>
+<script>
+const db = supabaseClient;
+const $ = (id) => document.getElementById(id);
+const RECENT_COUNT = 12;
+
+let student = null, books = [], current = null;
+
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+let toastTimer;
+function toast(msg, isError){
+  let el = $('toast');
+  if (!el){ el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), isError ? 5000 : 2800);
+}
+
+// ---------- Cover / book markup ----------
+function coverInner(b){
+  return b.cover_image_url
+    ? `<img src="${esc(b.cover_image_url)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+    : '🖼️';
+}
+
+function bookCard(b){
+  return `<div class="book" tabindex="0" data-id="${b.book_id}">
+    <div class="cover${b.cover_image_url ? ' has-img' : ''}">${coverInner(b)}${b.available_copies < 1 ? '<span class="tag-out">All out</span>' : ''}</div>
+    <div class="book-title">${esc(b.title)}</div>
+  </div>`;
+}
+
+function shelfRow(label, list){
+  return `<section class="shelf-block">
+    <div class="shelf-label">${esc(label)}</div>
+    <div class="shelf-scroll">${list.map(bookCard).join('')}</div>
+  </section>`;
+}
+
+// ---------- Build the wall from the database ----------
+function renderWall(){
+  if (!books.length){
+    $('wall').innerHTML = '<div class="wall-msg">No books on the shelves yet. Check back soon.</div>';
+    return;
+  }
+
+  const recent = [...books].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, RECENT_COUNT);
+
+  const groups = new Map();
+  books.forEach(b => {
+    const key = b.categories?.name || 'Other';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(b);
+  });
+  const names = [...groups.keys()].sort((a, b) =>
+    a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b));
+
+  $('wall').innerHTML = shelfRow('Recent', recent) + names.map(n => shelfRow(n, groups.get(n))).join('');
+}
+
+// ---------- Book details ----------
+function openBook(id){
+  const b = books.find(x => x.book_id === id);
+  if (!b) return;
+  current = b;
+  $('mCover').className = 'cover' + (b.cover_image_url ? ' has-img' : '');
+  $('mCover').innerHTML = coverInner(b);
+  $('mTitle').textContent = b.title;
+  $('mBy').textContent = 'by ' + b.author;
+
+  const facts = [
+    ['Category', b.categories?.name],
+    ['Shelf', b.shelf_location],
+    ['Publisher', b.publisher],
+    ['Year', b.published_year],
+  ].filter(f => f[1]).map(f => `<dt>${f[0]}</dt><dd>${esc(f[1])}</dd>`).join('');
+  const avail = b.available_copies > 0
+    ? `<span class="badge ok">${b.available_copies} of ${b.total_copies} available</span>`
+    : '<span class="badge bad">All copies are out</span>';
+  $('mFacts').innerHTML = facts + `<dt>Copies</dt><dd>${avail}</dd>`;
+
+  const canReserve = b.available_copies < 1 && student.status === 'active';
+  $('mReserve').style.display = canReserve ? '' : 'none';
+  $('mReserve').disabled = false;
+  $('mNote').textContent =
+    student.status !== 'active' ? 'Your account is suspended. Please see the librarian.' :
+    b.available_copies > 0 ? 'Available now. Bring your student ID to the library desk to borrow it.' :
+    'Reserve it and the librarian will check it out to you when a copy comes back.';
+  $('bookModal').classList.add('show');
+}
+
+function closeBook(){ $('bookModal').classList.remove('show'); }
+$('mClose').addEventListener('click', closeBook);
+$('bookModal').addEventListener('click', (e) => { if (e.target === $('bookModal')) closeBook(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBook(); });
+
+$('mReserve').addEventListener('click', async () => {
+  if (!current) return;
+  const btn = $('mReserve');
+  btn.disabled = true;
+
+  const existing = await db.from('reservations').select('reservation_id')
+    .eq('student_id', student.id).eq('book_id', current.book_id).eq('status', 'pending').limit(1);
+  if (existing.error){ btn.disabled = false; return toast(existing.error.message, true); }
+  if (existing.data.length){ closeBook(); return toast('You already have a pending reservation for this book.'); }
+
+  const { error } = await db.from('reservations').insert({ student_id: student.id, book_id: current.book_id });
+  if (error){ btn.disabled = false; return toast(error.message, true); }
+  closeBook();
+  toast('Reserved “' + current.title + '”. The librarian will set it aside for you.');
+});
+
+// click / keyboard on a book
+$('wall').addEventListener('click', (e) => {
+  const card = e.target.closest('.book');
+  if (card) openBook(Number(card.dataset.id));
+});
+$('wall').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.book');
+  if (card){ e.preventDefault(); openBook(Number(card.dataset.id)); }
+});
+
+// ---------- Live search ----------
+const input = $('searchInput'), results = $('searchResults');
+
+input.addEventListener('input', () => {
+  const q = input.value.trim().toLowerCase();
+  if (!q){ results.classList.remove('show'); results.innerHTML = ''; return; }
+
+  const matches = books.filter(b =>
+    b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)).slice(0, 8);
+
+  results.innerHTML = matches.length
+    ? matches.map(b => `
+        <div class="result-item" data-id="${b.book_id}">
+          ${b.cover_image_url
+            ? `<img class="result-thumb" src="${esc(b.cover_image_url)}" alt="" referrerpolicy="no-referrer">`
+            : '<div class="result-thumb">🖼️</div>'}
+          <div><div class="result-title">${esc(b.title)}</div><div class="result-sub">${esc(b.author)}</div></div>
+        </div>`).join('')
+    : `<div class="no-results">No books match “${esc(input.value)}”</div>`;
+  results.classList.add('show');
+});
+
+results.addEventListener('click', (e) => {
+  const item = e.target.closest('.result-item');
+  if (!item) return;
+  results.classList.remove('show');
+  openBook(Number(item.dataset.id));
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-wrap')) results.classList.remove('show');
+});
+
+// ---------- Profile panel: my borrowed books ----------
+const FINE_PER_DAY = 25;   // display only; the librarian's system records the real fine on return
+
+const parseDay = (d) => new Date(d + 'T00:00:00');
+const fmtDay = (d) => parseDay(d).toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+const peso = (n) => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits:2, maximumFractionDigits:2 });
+function dayDiff(due){            // positive = days left, negative = days late
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((parseDay(due) - t) / 86400000);
+}
+function initials(name){
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+function dueBadge(due){
+  const d = dayDiff(due);
+  if (d < 0) return `<span class="badge bad">Overdue ${-d} day${d === -1 ? '' : 's'} · ${peso(-d * FINE_PER_DAY)}</span>`;
+  if (d === 0) return '<span class="badge warn">Due today</span>';
+  if (d <= 2) return `<span class="badge warn">${d} day${d === 1 ? '' : 's'} left</span>`;
+  return `<span class="badge ok">${d} days left</span>`;
+}
+
+async function loadProfile(){
+  const [l, f] = await Promise.all([
+    db.from('borrow_records')
+      .select('borrow_id, borrow_date, due_date, return_date, status, books(title)')
+      .eq('student_id', student.id).order('borrow_date', { ascending:false }).limit(30),
+    db.from('fines')
+      .select('fine_id, amount, reason, paid, borrow_records(books(title))')
+      .eq('paid', false),
+  ]);
+
+  if (l.error || f.error){
+    $('pBody').innerHTML = `<div class="p-empty">Could not load your books: ${esc((l.error || f.error).message)}</div>`;
+    return;
+  }
+
+  const rows = l.data || [];
+  const active = rows.filter(r => r.status === 'borrowed' || r.status === 'overdue');
+  const returned = rows.filter(r => r.status === 'returned').slice(0, 3);
+  const unpaid = (f.data || []).reduce((s, x) => s + Number(x.amount), 0);
+  const anyLate = active.some(r => dayDiff(r.due_date) < 0);
+
+  $('avatarDot').classList.toggle('show', anyLate || unpaid > 0);
+
+  let html = `<div class="p-section"><h3>Currently borrowed (${active.length})</h3>` +
+    (active.length ? active.map(r => `
+      <div class="loan">
+        <div class="loan-title">${esc(r.books?.title)}</div>
+        <div class="loan-meta"><span>Due ${fmtDay(r.due_date)}</span>${dueBadge(r.due_date)}</div>
+      </div>`).join('') : '<div class="p-empty">You have no borrowed books right now.</div>') + '</div>';
+
+  if (unpaid > 0){
+    html += `<div class="p-section"><div class="fine-box">Unpaid fines: ${peso(unpaid)}
+      <small>Please settle this at the library desk.</small></div></div>`;
+  }
+
+  if (returned.length){
+    html += `<div class="p-section"><h3>Recently returned</h3>` + returned.map(r => `
+      <div class="loan">
+        <div class="loan-title">${esc(r.books?.title)}</div>
+        <div class="loan-meta"><span>Returned ${fmtDay(r.return_date)}</span>
+          ${r.return_date > r.due_date ? '<span class="badge warn">Late</span>' : '<span class="badge muted">On time</span>'}</div>
+      </div>`).join('') + '</div>';
+  }
+  $('pBody').innerHTML = html;
+}
+
+function setProfileOpen(open){
+  $('profilePanel').classList.toggle('show', open);
+  $('avatarBtn').setAttribute('aria-expanded', String(open));
+  if (open) loadProfile();     // refresh every time it opens
+}
+$('avatarBtn').addEventListener('click', () => setProfileOpen(!$('profilePanel').classList.contains('show')));
+document.addEventListener('click', (e) => { if (!e.target.closest('#profileWrap')) setProfileOpen(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setProfileOpen(false); });
+
+// ---------- Sign out ----------
+$('signOutBtn').addEventListener('click', async () => {
+  await db.auth.signOut();
+  location.href = '../index.html';
+});
+
+// ---------- Start: check who is signed in, then load the books ----------
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session){ location.href = '../index.html'; return; }
+
+  const { data: stu, error } = await db.from('students')
+    .select('id, full_name, student_id, course, status').eq('id', session.user.id).maybeSingle();
+
+  if (error){
+    document.body.classList.remove('pending');
+    $('wall').innerHTML = `<div class="wall-msg">Could not load your account: ${esc(error.message)}</div>`;
+    return;
+  }
+  if (!stu){
+    // Not a student: send admins to their dashboard, anyone else back to login
+    const { data: adm } = await db.from('admins').select('id').eq('id', session.user.id).maybeSingle();
+    if (!adm) await db.auth.signOut();
+    location.href = adm ? '../admin/dashboard.html' : '../index.html';
+    return;
+  }
+
+  student = stu;
+  document.body.classList.remove('pending');
+  $('avatarInitials').textContent = $('panelInitials').textContent = initials(stu.full_name);
+  $('pName').textContent = stu.full_name;
+  $('pSub').textContent = stu.student_id + ' · ' + stu.course;
+  loadProfile();   // fills the badge dot; the panel refreshes again each time it opens
+  if (stu.status !== 'active'){
+    $('notice').textContent = 'Your account is suspended. You can browse, but please see the librarian to borrow or reserve books.';
+    $('notice').classList.add('show');
+  }
+
+  const { data, error: bookErr } = await db.from('books')
+    .select('book_id, title, author, publisher, published_year, shelf_location, cover_image_url, available_copies, total_copies, created_at, categories(name)')
+    .order('title');
+  if (bookErr){
+    $('wall').innerHTML = `<div class="wall-msg">Could not load the books: ${esc(bookErr.message)}</div>`;
+    return;
+  }
+  books = data || [];
+  renderWall();
+})();
+</script>
+</body>
+</html>

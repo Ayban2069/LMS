@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library — Students</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/admin.css">
+</head>
+<body class="pending">
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Students &amp; reservations</h1>
+        <p>Manage student accounts and requests for books that were out.</p>
+      </div>
+    </div>
+
+    <!-- Reservations -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Pending reservations <span class="cell-sub" id="resCount"></span></h2>
+      </div>
+      <div class="table-wrap" id="resTable"><div class="empty">Loading…</div></div>
+    </div>
+
+    <!-- Students -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Students <span class="cell-sub" id="stuCount"></span></h2>
+        <input type="search" class="search-box" id="stuSearch" placeholder="Search ID, name or course…">
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+          <tbody id="stuRows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/supabaseClient.js"></script>
+<script src="../assets/admin.js"></script>
+<script>
+let admin, students = [], reservations = [];
+
+async function loadAll(){
+  const [s, r] = await Promise.all([
+    db.from('students').select('*').order('full_name'),
+    db.from('reservations')
+      .select('reservation_id, student_id, book_id, reserved_at, students(full_name, student_id), books(title, available_copies)')
+      .eq('status', 'pending').order('reserved_at'),
+  ]);
+  const failed = [s, r].find(x => x.error);
+  if (failed) toast(failed.error.message, true);
+  students = s.data || []; reservations = r.data || [];
+  renderStudents();
+  renderReservations();
+}
+
+// ---------- Students ----------
+function renderStudents(){
+  const q = $('stuSearch').value.trim().toLowerCase();
+  const list = students.filter(s => !q ||
+    [s.student_id, s.full_name, s.course].some(v => (v || '').toLowerCase().includes(q)));
+
+  $('stuCount').textContent = '(' + list.length + (list.length !== students.length ? ' of ' + students.length : '') + ')';
+
+  $('stuRows').innerHTML = list.length ? list.map(s => `
+    <tr>
+      <td class="cell-main">${esc(s.student_id)}</td>
+      <td>${esc(s.full_name)}</td>
+      <td>${esc(s.course)}</td>
+      <td>${s.status === 'active' ? '<span class="badge ok">Active</span>' : '<span class="badge bad">Suspended</span>'}</td>
+      <td>${fmtDate(s.created_at)}</td>
+      <td class="actions">
+        ${s.status === 'active'
+          ? `<button class="btn danger small" data-act="suspend" data-id="${esc(s.id)}">Suspend</button>`
+          : `<button class="btn small" data-act="activate" data-id="${esc(s.id)}">Reactivate</button>`}
+      </td>
+    </tr>`).join('')
+    : `<tr><td colspan="6" class="empty">${students.length ? 'No students match your search.' : 'No students have registered yet.'}</td></tr>`;
+}
+
+$('stuSearch').addEventListener('input', renderStudents);
+
+$('stuRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const stu = students.find(s => s.id === btn.dataset.id);
+  if (!stu) return;
+
+  const suspending = btn.dataset.act === 'suspend';
+  if (suspending && !confirm(`Suspend ${stu.full_name}? They won’t be able to borrow books until reactivated.`)) return;
+
+  btn.disabled = true;
+  const { error } = await db.from('students')
+    .update({ status: suspending ? 'suspended' : 'active' }).eq('id', stu.id);
+  if (error){ btn.disabled = false; return toast(error.message, true); }
+  toast(suspending ? 'Student suspended.' : 'Student reactivated.');
+  loadAll();
+});
+
+// ---------- Reservations ----------
+function renderReservations(){
+  $('resCount').textContent = reservations.length ? '(' + reservations.length + ')' : '';
+  if (!reservations.length){
+    $('resTable').innerHTML = '<div class="empty">No pending reservations.</div>';
+    return;
+  }
+  $('resTable').innerHTML = `<table class="data"><thead><tr>
+      <th>Student</th><th>Book</th><th>Requested</th><th>Copies</th><th></th></tr></thead><tbody>` +
+    reservations.map(r => {
+      const avail = r.books?.available_copies ?? 0;
+      return `<tr>
+        <td><div class="cell-main">${esc(r.students?.full_name)}</div><div class="cell-sub">${esc(r.students?.student_id)}</div></td>
+        <td>${esc(r.books?.title)}</td>
+        <td>${fmtDate(r.reserved_at)}</td>
+        <td><span class="badge ${avail > 0 ? 'ok' : 'bad'}">${avail} available</span></td>
+        <td class="actions">
+          <button class="btn small" data-act="fulfill" data-id="${r.reservation_id}" ${avail > 0 ? '' : 'disabled title="No copy available yet"'}>Check out</button>
+          <button class="btn ghost small" data-act="cancel" data-id="${r.reservation_id}">Cancel</button>
+        </td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+$('resTable').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button');
+  if (!btn || btn.disabled) return;
+  const res = reservations.find(r => String(r.reservation_id) === btn.dataset.id);
+  if (!res) return;
+  btn.disabled = true;
+
+  if (btn.dataset.act === 'fulfill'){
+    // Same rules as the desk checkout (limit, suspended account, copies)
+    const { error } = await db.rpc('checkout_book', { p_student: res.student_id, p_book: res.book_id });
+    if (error){ btn.disabled = false; return toast(error.message, true); }
+    const upd = await db.from('reservations').update({ status: 'fulfilled' }).eq('reservation_id', res.reservation_id);
+    if (upd.error) return toast('Book checked out, but the reservation could not be closed: ' + upd.error.message, true);
+    toast(`Checked out “${res.books?.title}” to ${res.students?.full_name}. Due ${fmtDate(addDays(ADMIN_CONFIG.LOAN_DAYS))}.`);
+  } else {
+    if (!confirm('Cancel this reservation?')){ btn.disabled = false; return; }
+    const { error } = await db.from('reservations').update({ status: 'cancelled' }).eq('reservation_id', res.reservation_id);
+    if (error){ btn.disabled = false; return toast(error.message, true); }
+    toast('Reservation cancelled.');
+  }
+  loadAll();
+});
+
+(async () => {
+  admin = await initAdmin('students');
+  if (admin) loadAll();
+})();
+</script>
+</body>
+</html>

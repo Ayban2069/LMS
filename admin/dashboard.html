@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCC Library — Admin Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/admin.css">
+</head>
+<body class="pending">
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p id="welcome">Library at a glance</p>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="stats"></div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Latest borrows</h2>
+        <a class="btn ghost small" href="borrowing.html" style="text-decoration:none">Go to borrowing</a>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Student</th><th>Book</th><th>Borrowed</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody id="recent"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/supabaseClient.js"></script>
+<script src="../assets/admin.js"></script>
+<script>
+function statusBadge(status){
+  if (status === 'overdue')  return '<span class="badge bad">Overdue</span>';
+  if (status === 'returned') return '<span class="badge ok">Returned</span>';
+  if (status === 'lost')     return '<span class="badge muted">Lost</span>';
+  return '<span class="badge warn">Borrowed</span>';
+}
+
+function statCard(label, value, hint, alert){
+  return `<div class="stat${alert ? ' alert' : ''}"><div class="label">${label}</div><div class="value">${value}</div><div class="hint">${hint || '&nbsp;'}</div></div>`;
+}
+
+(async () => {
+  const admin = await initAdmin('dashboard');
+  if (!admin) return;
+  $('welcome').textContent = 'Welcome back, ' + admin.full_name;
+
+  await db.rpc('refresh_overdue');   // flag late loans first; harmless if it fails
+
+  const [books, students, onLoan, overdue, fines, recent] = await Promise.all([
+    db.from('books').select('total_copies, available_copies'),
+    db.from('students').select('id', { count:'exact', head:true }),
+    db.from('borrow_records').select('borrow_id', { count:'exact', head:true }).in('status', ['borrowed', 'overdue']),
+    db.from('borrow_records').select('borrow_id', { count:'exact', head:true }).eq('status', 'overdue'),
+    db.from('fines').select('amount').eq('paid', false),
+    db.from('borrow_records')
+      .select('borrow_id, borrow_date, due_date, status, students(full_name, student_id), books(title)')
+      .order('created_at', { ascending:false }).limit(8),
+  ]);
+
+  const failed = [books, students, onLoan, overdue, fines, recent].find(r => r.error);
+  if (failed) toast(failed.error.message, true);
+
+  const titles = books.data ? books.data.length : 0;
+  const totalCopies = (books.data || []).reduce((s, b) => s + b.total_copies, 0);
+  const availCopies = (books.data || []).reduce((s, b) => s + b.available_copies, 0);
+  const unpaid = (fines.data || []).reduce((s, f) => s + Number(f.amount), 0);
+  const overdueCount = overdue.count || 0;
+
+  $('stats').innerHTML = [
+    statCard('Book titles', titles, totalCopies + ' copies in total'),
+    statCard('Available now', availCopies, 'of ' + totalCopies + ' copies'),
+    statCard('Students', students.count || 0, 'registered accounts'),
+    statCard('On loan', onLoan.count || 0, 'books currently out'),
+    statCard('Overdue', overdueCount, 'need to be returned', overdueCount > 0),
+    statCard('Unpaid fines', peso(unpaid), (fines.data || []).length + ' fine(s) open', unpaid > 0),
+  ].join('');
+
+  const rows = recent.data || [];
+  $('recent').innerHTML = rows.length ? rows.map(r => `
+    <tr>
+      <td><div class="cell-main">${esc(r.students?.full_name)}</div><div class="cell-sub">${esc(r.students?.student_id)}</div></td>
+      <td>${esc(r.books?.title)}</td>
+      <td>${fmtDate(r.borrow_date)}</td>
+      <td>${fmtDate(r.due_date)}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No borrows yet.</td></tr>';
+})();
+</script>
+</body>
+</html>

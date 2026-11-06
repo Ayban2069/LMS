@@ -160,8 +160,8 @@
     <div class="view active" id="view-user-login">
       <h1 class="card-title">Welcome back</h1>
       <p class="card-sub">Sign in with your student account.</p>
-      <form onsubmit="return handleSubmit(event,'user-login')">
-        <div class="field"><label>Student ID</label><input name="student_id" placeholder="e.g. 202324-0001" required></div>
+      <form onsubmit="return handleUserLogin(event)">
+        <div class="field"><label>Email</label><input type="email" name="email" placeholder="you@bcc.edu.ph" required></div>
         <div class="field"><label>Password</label><input type="password" name="password" placeholder="••••••••" required></div>
         <button class="submit-btn" type="submit">Sign in</button>
       </form>
@@ -172,19 +172,21 @@
     <div class="view" id="view-user-register">
       <h1 class="card-title">Create your account</h1>
       <p class="card-sub">Register with your BCC student details.</p>
-      <form onsubmit="return handleSubmit(event,'user-register')">
+      <form onsubmit="return handleUserRegister(event)">
         <div class="field"><label>Full name</label><input name="full_name" placeholder="Rene Baterbonia" required></div>
         <div class="row-2">
-          <div class="field"><label>Student ID</label><input name="student_id" placeholder="202324-0001" required></div>
-          <div class="field"><label for="course">Course</label><select id="course" name="course" required>
-            <option value="" selected disabled>Select your course</option>
-            <option value="BSIT">BSIT</option>
-            <option value="BSHM">BSHM</option>
-            <option value="BSCRIM">BSCRIM</option>
-            <option value="BSTM">BSTM</option>
-            <option value="BSED">BSED</option>
-            <option value="BEED">BEED</option>
-          </select></div>
+          <div class="field"><label>Student ID</label><input name="student_id" placeholder="202627-0001" required></div>
+          <div class="field"><label>Course</label>
+            <select name="course" required>
+              <option value="" disabled selected>Select course</option>
+              <option value="BSIT">BSIT</option>
+              <option value="BSED">BSED</option>
+              <option value="BEED">BEED</option>
+              <option value="BSHM">BSHM</option>
+              <option value="BSCRIM">BSCRIM</option>
+              <option value="BSTM">BSTM</option>
+            </select>
+          </div>
         </div>
         <div class="field"><label>Email</label><input type="email" name="email" placeholder="you@bcc.edu.ph" required></div>
         <div class="row-2">
@@ -200,14 +202,14 @@
     <div class="view" id="view-admin-login">
       <h1 class="card-title">Admin sign in</h1>
       <p class="card-sub">Library staff access only.</p>
-      <form onsubmit="return handleSubmit(event,'admin-login')">
-        <div class="field"><label>Admin ID</label><input name="admin_id" placeholder="e.g. LIB-003" required></div>
+      <form onsubmit="return handleAdminLogin(event)">
+        <div class="field"><label>Email</label><input type="email" name="email" placeholder="staff@bcc.edu.ph" required></div>
         <div class="field"><label>Password</label><input type="password" name="password" placeholder="••••••••" required></div>
         <button class="submit-btn" type="submit">Sign in</button>
       </form>
     </div>
 
-    <div class="note" id="note">Hooked up to the UI only for now — connect a database to enable real sign-in.</div>
+    <div class="note" id="note"></div>
   </div>
 </div>
 
@@ -222,11 +224,9 @@
     document.getElementById('view-'+name).classList.add('active');
     document.getElementById('note').classList.remove('show');
   }
-  function handleSubmit(e, formName){
-    e.preventDefault();
-    document.getElementById('note').classList.add('show');
-    return false;
-  }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabaseClient.js"></script>
+<script src="assets/auth.js"></script>
 </body>
 </html>
